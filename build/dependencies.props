@@ -18,7 +18,7 @@
   <PropertyGroup>
     <CodeAnalysisVersion>1.3.0</CodeAnalysisVersion>
     <MicrosoftBuildVersion>15.1.548</MicrosoftBuildVersion>
-    <NewtonSoftVersion>9.0.1</NewtonSoftVersion>
+    <NewtonSoftVersion>10.0.1</NewtonSoftVersion>
     <NuGetFrameworksVersion>4.0.0-*</NuGetFrameworksVersion>
     <NuGetFrameworksLegacyVersion>3.5.0</NuGetFrameworksLegacyVersion>
     <SystemAppContextVersion>4.3.0</SystemAppContextVersion>
