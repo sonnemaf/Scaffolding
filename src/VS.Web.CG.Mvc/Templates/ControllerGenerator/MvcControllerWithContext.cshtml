@@ -84,12 +84,12 @@ namespace @Model.ControllerNamespace
         .Select(property => String.Format(".Include({0} => {0}.{1})", lambdaVar, property.AssociationPropertyName)));
     if (!String.IsNullOrEmpty(includeExpressions))
     {
-            @:var @entitySetVar = _context.@entitySetName@includeExpressions;
-            @:return View(await @(entitySetVar).ToListAsync());
+            @:var qry = _context.@(entitySetName).AsNoTracking()@includeExpressions;
+            @:return View(await qry.ToListAsync());
     }
     else
     {
-            @:return View(await _context.@(entitySetName).ToListAsync());
+            @:return View(await _context.@(entitySetName).AsNoTracking().ToListAsync());
     }
 }        }
 
@@ -101,7 +101,7 @@ namespace @Model.ControllerNamespace
                 return NotFound();
             }
 
-            var @Model.ModelVariable = await _context.@(entitySetName)@inlineIncludes
+            var @Model.ModelVariable = await _context.@(entitySetName)@(inlineIncludes)
                 .SingleOrDefaultAsync(m => m.@primaryKeyName == id);
             if (@Model.ModelVariable == null)
             {
@@ -114,12 +114,8 @@ namespace @Model.ControllerNamespace
         // GET: @routePrefix/Create
         public IActionResult Create()
         {
-@{
-    foreach (var property in relatedProperties.Values)
-    {
-            @:ViewData["@(property.ForeignKeyPropertyNames[0])"] = new SelectList(_context.@property.EntitySetName, "@property.PrimaryKeyNames[0]", "@property.DisplayPropertyName");
-    }
-}            return View();
+            InitializeSelectLists(null);
+            return View();
         }
 
         // POST: @routePrefix/Create
@@ -129,23 +125,22 @@ namespace @Model.ControllerNamespace
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("@bindString")] @Model.ModelTypeName @Model.ModelVariable)
         {
-            if (ModelState.IsValid)
-            {
+            try {
+                if (ModelState.IsValid)
+                {
 @{
     if (!string.IsNullOrEmpty(primaryKeyType) && IsGuid(primaryKeyType))
     {
-                @:@(Model.ModelVariable).@primaryKeyName = Guid.NewGuid();
+                    @:@(Model.ModelVariable).@primaryKeyName = Guid.NewGuid();
     }
-                @:_context.Add(@Model.ModelVariable);
-                @:await _context.SaveChangesAsync();
-}                return RedirectToAction(nameof(Index));
+                    @:_context.Add(@Model.ModelVariable);
+                    @:await _context.SaveChangesAsync();
+}                    return RedirectToAction(nameof(Index));
+                }
+            } catch {
+                this.ModelState.AddModelError(string.Empty, "Create failed");
             }
-@{
-    foreach (var property in relatedProperties.Values)
-    {
-            @:ViewData["@(property.ForeignKeyPropertyNames[0])"] = new SelectList(_context.@property.EntitySetName, "@property.PrimaryKeyNames[0]", "@property.DisplayPropertyName", @(Model.ModelVariable).@property.ForeignKeyPropertyNames[0]);
-    }
-}
+            InitializeSelectLists(@Model.ModelVariable);
             return View(@Model.ModelVariable);
         }
 
@@ -162,12 +157,7 @@ namespace @Model.ControllerNamespace
             {
                 return NotFound();
             }
-@{
-    foreach (var property in relatedProperties.Values)
-    {
-            @:ViewData["@(property.ForeignKeyPropertyNames[0])"] = new SelectList(_context.@property.EntitySetName, "@property.PrimaryKeyNames[0]", "@property.DisplayPropertyName", @(Model.ModelVariable).@property.ForeignKeyPropertyNames[0]);
-    }
-}
+            InitializeSelectLists(@Model.ModelVariable);
             return View(@Model.ModelVariable);
         }
 
@@ -183,32 +173,32 @@ namespace @Model.ControllerNamespace
                 return NotFound();
             }
 
-            if (ModelState.IsValid)
-            {
-                try
+            try {
+                if (ModelState.IsValid)
                 {
-                    _context.Update(@Model.ModelVariable);
-                    await _context.SaveChangesAsync();
-                }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!@(Model.ModelTypeName)Exists(@Model.ModelVariable.@primaryKeyName))
+                    try
                     {
-                        return NotFound();
+                        _context.Update(@Model.ModelVariable);
+                        await _context.SaveChangesAsync();
                     }
-                    else
+                    catch (DbUpdateConcurrencyException)
                     {
-                        throw;
+                        if (!@(Model.ModelTypeName)Exists(@Model.ModelVariable.@primaryKeyName))
+                        {
+                            return NotFound();
+                        }
+                        else
+                        {
+                            throw;
+                        }
                     }
+                    return RedirectToAction(nameof(Index));
                 }
-                return RedirectToAction(nameof(Index));
+            } catch {
+                this.ModelState.AddModelError(string.Empty, "Edit failed");
             }
-@{
-    foreach (var property in relatedProperties.Values)
-    {
-            @:ViewData["@(property.ForeignKeyPropertyNames[0])"] = new SelectList(_context.@property.EntitySetName, "@property.PrimaryKeyNames[0]", "@property.DisplayPropertyName", @(Model.ModelVariable).@property.ForeignKeyPropertyNames[0]);
-    }
-}
+            InitializeSelectLists(@Model.ModelVariable);
+
             return View(@Model.ModelVariable);
         }
 
@@ -236,14 +226,31 @@ namespace @Model.ControllerNamespace
         public async Task<IActionResult> DeleteConfirmed(@primaryKeyShortTypeName id)
         {
             var @Model.ModelVariable = await _context.@(entitySetName).SingleOrDefaultAsync(m => m.@primaryKeyName == id);
-            _context.@(entitySetName).Remove(@Model.ModelVariable);
-            await _context.SaveChangesAsync();
-            return RedirectToAction(nameof(Index));
+            if (@Model.ModelVariable == null) {
+                return NotFound();
+            }
+
+            try {
+                _context.@(entitySetName).Remove(@Model.ModelVariable);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
+            } catch {
+                this.ModelState.AddModelError(string.Empty, "Delete failed");
+            }
+            return View(@Model.ModelVariable);
         }
 
         private bool @(Model.ModelTypeName)Exists(@primaryKeyShortTypeName id)
         {
             return _context.@(entitySetName).Any(e => e.@primaryKeyName == id);
+        }
+
+        private void InitializeSelectLists(@Model.ModelTypeName @Model.ModelVariable) {
+@{
+    foreach (var property in relatedProperties.Values) {
+            @:ViewData["@(property.ForeignKeyPropertyNames[0])"] = new SelectList(_context.@(property.EntitySetName).AsNoTracking().OrderBy(r => r.@property.DisplayPropertyName).Select(r => new { r.@property.PrimaryKeyNames[0], r.@property.DisplayPropertyName }), "@property.PrimaryKeyNames[0]", "@property.DisplayPropertyName", @(Model.ModelVariable)?.@(property.PrimaryKeyNames[0]) ?? null);
+    }
+}  
         }
     }
 }
